@@ -1,0 +1,49 @@
+workflows:
+  kotoba-time-ios:
+    name: Kotoba Time iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      xcode: latest
+
+    scripts:
+      - name: Inspect repository
+        script: |
+          echo "Repository root:"
+          pwd
+          ls -la
+          echo ""
+          echo "Searching for Xcode projects and workspaces..."
+          find . -maxdepth 4 \( -name "*.xcodeproj" -o -name "*.xcworkspace" -o -name "Package.swift" \) -print
+
+      - name: Build app if Xcode project exists
+        script: |
+          set -e
+          PROJECT="$(find . -maxdepth 4 -name "*.xcodeproj" -print -quit)"
+          WORKSPACE="$(find . -maxdepth 4 -name "*.xcworkspace" -print -quit)"
+
+          if [ -n "$WORKSPACE" ]; then
+            SCHEME="$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | awk '/Schemes:/{flag=1;next} flag && NF {gsub(/^[[:space:]]+/, ""); print; exit}')"
+            if [ -z "$SCHEME" ]; then
+              echo "ERROR: Could not detect an Xcode scheme in $WORKSPACE"
+              exit 1
+            fi
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          elif [ -n "$PROJECT" ]; then
+            SCHEME="$(xcodebuild -list -project "$PROJECT" 2>/dev/null | awk '/Schemes:/{flag=1;next} flag && NF {gsub(/^[[:space:]]+/, ""); print; exit}')"
+            if [ -z "$SCHEME" ]; then
+              echo "ERROR: Could not detect an Xcode scheme in $PROJECT"
+              exit 1
+            fi
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          else
+            echo "ERROR: No .xcodeproj or .xcworkspace was found."
+            echo "The current Kotoba Time starter contains Swift source files, but it is not yet a complete Xcode project."
+            echo "Create/add a complete Xcode project and Widget Extension, then run this workflow again."
+            exit 1
+          fi
+
+    artifacts:
+      - build/Build/Products/Release-iphoneos/*.app
+      - build/Build/Products/Release-iphoneos/*.dSYM
